@@ -118,7 +118,7 @@
 						(map 
 							simple-count-stats 
 							(filter 
-								#(.endsWith (.getName %) ".warc.gz") 
+								#(or (.endsWith (.getName %) ".warc.gz") (.endsWith (.getName %) ".warc.gz.open"))
 								(file-seq (file heritrix-job-dir)))))]
 	
 		(add-to-csv-and-plot 
