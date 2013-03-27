@@ -93,7 +93,7 @@
 	 											<p>Count Graph<br/>
 	 											<img src=count-graph.png /></p>
 	 											<p>Size-graph<br/>
-	 											<img src=size-graph.png/></p>
+	 											<img src=size-graph.png /></p>
 	 											</html>"]))))))
 
 
