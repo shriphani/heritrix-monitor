@@ -91,17 +91,9 @@
 
 	 											"</title>
 	 											<p>Count Graph<br/>
-	 											<img src="
-
-	 											(join "" [stats-out-dir "count-graph.png"])
-
-	 											" /></p>
+	 											<img src=count-graph.png /></p>
 	 											<p>Size-graph<br/>
-	 											<img src="
-
-	 											(join "" [stats-out-dir "size-graph.png"])
-
-	 											" /></p>
+	 											<img src=size-graph.png/></p>
 	 											</html>"]))))))
 
 
