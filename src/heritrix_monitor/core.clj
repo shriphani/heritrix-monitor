@@ -8,24 +8,30 @@
 	(:use (incanter core stats charts))
 	(:import java.text.SimpleDateFormat)
 	(:require [me.raynes.fs :as fs])
-	(:use [clojure.string :only (join)]))
+	(:use [clojure.string :only (join)])
+	(:require heritrix-monitor.db-layer))
 
 ;(def *stats-out-dir* "/bos/www/htdocs/spalakod")
 
 (def *stats-out-dir* "/tmp/")
 
 (defn simple-count-stats
-	"Computes number of warcs and size of all response records downloaded"
-	[warc-gz-fname]
-	(let [warc-gz-seq (warc-clojure.core/get-response-records-seq (warc-clojure.core/get-warc-reader warc-gz-fname))]
-		(reduce 
-			(fn 
-				[x y] 
-				(merge x 
-				{:count (+' (:count x) 1) 
-				 :size (+' (:content-length y) (:size x))})) 
-			{:count 0 :size 0} 
-			warc-gz-seq)))
+	"Computes number of warcs and size of all response records downloaded
+	Then adds the filename and some vital quick-look stats like URL etc. to a database"
+	[warc-gz-fname heritrix-job-name db]
+	(do
+		(heritrix-monitor.db-layer/add-warc-filename (fs/base-name warc-gz-fname) heritrix-job-name db)
+		(let [warc-gz-seq (warc-clojure.core/get-response-records-seq 
+							(warc-clojure.core/get-warc-reader warc-gz-fname))]
+			(reduce 
+				(fn 
+					[x y] 
+					(merge x 
+					{:count (+' (:count x) 1) 
+					 :size (+' (:content-length y) (:size x))
+					 :urls (cons (:target-uri-str y) (:urls x))})) 
+				{:count 0 :size 0 :urls []} 
+				warc-gz-seq))))
 
 (defn total-warc-gz-stats
 	"Computes number of warcs etc but is not really used."
@@ -96,31 +102,46 @@
 	 											<img src=size-graph.png /></p>
 	 											</html>"]))))))
 
+(defn check-already-visited
+	[f] false)
 
 (defn -main
 	[& args]
 	(let 
-		[[args-vector [heritrix-job-dir] banner] (cli 
+		[[args-vector [heritrix-job-dir db-path] banner] (cli 
 													args 
 													["-o" 
 													 "--output-dir" 
 													 "Specify output directory" 
 													 :default *stats-out-dir*])
-		 stats (reduce 
+		 db 	{
+		 			:classname   "org.sqlite.JDBC"
+   				 	:subprotocol "sqlite"
+   				 	:subname     db-path
+   				}]
+
+   		(heritrix-monitor.db-layer/create-when-empty db)
+
+		 (let
+		 	[stats 	(reduce 
 						(fn
 							[x y]
 							(merge x
 							{
 								:count (+ (:count x) (:count y))
 								:size (+ (:size y) (:size x))
+								:urls (concat (:urls x) (:urls y))
 							}))
 						{:count 0 :size 0}
-						(map 
-							simple-count-stats 
+						(pmap 
+							(fn [warc_gz_file] (simple-count-stats warc_gz_file (fs/base-name heritrix-job-dir) db))
 							(filter 
-								#(.endsWith (.getName %) ".warc.gz") 
+								#(and 
+									(.endsWith (.getName %) ".warc.gz") 
+									(not (heritrix-monitor.db-layer/already-visited? (.getName %) (fs/base-name heritrix-job-dir) db)))
 								(file-seq (file heritrix-job-dir)))))]
-	
-		(add-to-csv-and-plot 
-			(vector (vector (.getTime (new java.util.Date)) (:size stats) (:count stats) ""))
-			heritrix-job-dir (:output-dir args-vector))))
+
+			(add-to-csv-and-plot 
+				(vector (vector (.getTime (new java.util.Date)) (:size stats) (:count stats) ""))
+				heritrix-job-dir (:output-dir args-vector))
+			(heritrix-monitor.db-layer/add-urls-filename (:urls stats) (fs/base-name heritrix-job-dir) db))))
